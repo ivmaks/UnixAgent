@@ -574,12 +574,12 @@ sub getStatus {
 
     return undef unless $prefix;
 
-    if (open MTU, "</sys/class/net/$prefix/carrier"){
-        foreach (<MTU>){
+    if (open STATUS, "</sys/class/net/$prefix/carrier"){
+        foreach (<STATUS>){
             chomp;
             $status=$_;
         }
-        close MTU;
+        close STATUS;
     }
     return $status;
 }
@@ -590,12 +590,12 @@ sub getMAC {
 
     return undef unless $prefix;
 
-    if (open MTU, "</sys/class/net/$prefix/address"){
-        foreach (<MTU>){
+    if (open MAC, "</sys/class/net/$prefix/address"){
+        foreach (<MAC>){
             chomp;
             $mac=$_;
         }
-        close MTU;
+        close MAC;
     }
     return $mac;
 }
