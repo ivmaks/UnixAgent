@@ -217,6 +217,11 @@ sub run {
                     $type="vlan";
                     $virtualdev=1;
                 }
+                # Check if this is a bridge
+                if (-d "/sys/class/net/$description/bridge"){
+                    $type="bridge";
+                    $virtualdev=1;
+                }
 
 
                 if ($description && $ipaddress) {
