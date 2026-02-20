@@ -77,6 +77,8 @@ sub run {
     my $macaddr;
     my $status;
     my $type;
+    my $speed;
+    my $tmpstatus;
 
 
     # Looking for the gateway
@@ -95,22 +97,50 @@ sub run {
     foreach (@ifconfig){
         # skip loopback, pseudo-devices and point-to-point interfaces
         #next if /^(lo|fwe|vmnet|sit|pflog|pfsync|enc|strip|plip|sl|ppp)\d+/;
-        next unless(/^en([0-9])/); # darwin has a lot of interfaces, for this purpose we only want to deal with eth0 and eth1
+        next unless(/^en([0-9])|utun([0-9])/); # darwin has a lot of interfaces, for this purpose we only want to deal with eth0 and eth1
         if (/^(\S+):/) { push @list , $1; } # new interface name
     }
 
     # for each interface get it's parameters
     foreach $description (@list) {
-        $ipaddress = $ipmask = $macaddr = $status =  $type = undef;
+        $ipaddress = $ipmask = $macaddr = $status =  $type = $tmpstatus = undef;
         # search interface infos
         @ifconfig = `ifconfig $description`;
         foreach (@ifconfig){
+            if($description =~ /^utun([0-9])/) {
+                if(/status:\s+active/i) {
+                    $tmpstatus = "Up";
+                } else {
+                    $tmpstatus = "Unknown";
+                }
+            } else {
+                $tmpstatus = "Up" if /status:\s+active/i;
+            }
+
             $ipaddress = $1 if /inet (\S+)/i;
             $ipmask = $1 if /netmask\s+(\S+)/i;
             $macaddr = $2 if /(address:|ether|lladdr)\s+(\S+)/i;
-            $status = 1 if /status:\s+active/i;
+            $status = $tmpstatus;
             $type = $1 if /media:\s+(\S+)/i;
+            $speed = $1 if /media:\s+(\S+)\s+(\S+)/i && ! /supported media:/;
+            if ($speed =~ /autoselect/i) {
+              $speed = $2 if /media:\s+(\S+)\s+(\S+)/i && ! /supported media:/;
+              $speed .= " $3" if /media:\s+(\S+)\s+(\S+)\s+(\S+)/i && ! /supported media:/;
+            } else {
+              $speed .= " $2" if /media:\s+(\S+)\s+(\S+)/i && ! /supported media:/;
+            }
         }
+        if ($status ne "Up") {
+            $speed = "";
+        } else {
+            $speed =~ s/\(|\)|\<|\>|baseTX|baseT|,flow-control//g;
+            $speed =~ s/1000 /1 Gb\/s /g;
+            $speed =~ s/100 /100 Mb\/s /g;
+            $speed =~ s/10 /10 Mb\/s /g;
+            $speed =~ s/full-duplex/FDX/g;
+            $speed =~ s/half-duplex/HDX/g;
+        }
+
         my $binip = &ip_iptobin ($ipaddress ,4);
         # In BSD, netmask is given in hex form
         my $binmask = sprintf("%b", oct($ipmask));
@@ -118,17 +148,16 @@ sub run {
         $ipsubnet = ip_bintoip($binsubnet,4);
         my $mask = ip_bintoip($binmask,4);
         $common->addNetwork({
-
             DESCRIPTION => $description,
-            IPADDRESS => ($status?$ipaddress:undef),
+            IPADDRESS => ($ipaddress?$ipaddress:undef),
             IPDHCP => _ipdhcp($description),
-            IPGATEWAY => ($status?$ipgateway:undef),
-            IPMASK => ($status?$mask:undef),
-            IPSUBNET => ($status?$ipsubnet:undef),
+            IPGATEWAY => ($ipaddress?$ipgateway:undef),
+            IPMASK => ($ipaddress?$mask:undef),
+            IPSUBNET => ($ipaddress?$ipsubnet:undef),
             MACADDR => $macaddr,
-            STATUS => ($status?"Up":"Down"),
-            TYPE => ($status?$type:undef)
-
+            STATUS => ($status?$status:"Down"),
+            TYPE => ($type?$type:undef),
+            SPEED => $speed,
         });
     }
 }

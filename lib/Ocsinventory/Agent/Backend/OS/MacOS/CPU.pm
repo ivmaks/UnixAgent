@@ -12,52 +12,58 @@ sub check {
 sub run {
     my $params = shift;
     my $common = $params->{common};
+    my $processors;
+    my $arch;
+    my $datawidth;
 
-    # create sysprofile obj. Return undef unless we get a return value
-    my $profile = Mac::SysProfile->new();
-    my $data = $profile->gettype('SPHardwareDataType');
-    return(undef) unless(ref($data) eq 'ARRAY');
 
-    my $h = $data->[0];
-
-    ######### CPU
-    my $processort  = $h->{'processor_name'} | $h->{'cpu_type'}; # 10.5 || 10.4
-    my $processorn  = $h->{'number_processors'} || $h->{'number_cpus'};
-    my $processors  = $h->{'current_processor_speed'} || $h->{'cpu_speed'};
-
-    my $uuid = $h->{'platform_UUID'}; # 10.5, 10.6, 10.7, 10.8
-    chomp($uuid);
-    $uuid =~ s/\s+$//g;
-
-    # lamp spits out an sql error if there is something other than an int (MHZ) here....
-    if ($processors =~ /GHz$/){
-        $processors =~ s/ GHz//;
-        # French Mac returns 2,60 Ghz instead of
-        # 2.60 Ghz :D
-        $processors =~ s/,/./;
-        $processors = ($processors * 1000);
-    }
-    if ($processors =~ /MHz$/){
-        $processors =~ s/ MHz//;
+    # 32 or 64 bits arch?
+    my $sysctl_arch = `sysctl -n hw.cpu64bit_capable`;
+    if ($sysctl_arch == 1){
+       $arch = "x86_64";
+       $datawidth = 64;
+    } else {
+       $arch = "x86";
+       $datawidth = 32;
     }
 
-    ### mem convert it to meg's if it comes back in gig's
-    my $mem = $h->{'physical_memory'};
-    if ($mem =~ /GB$/){
-        $mem =~ s/\sGB$//;
-        $mem = ($mem * 1024);
-    }
-    if ($mem =~ /MB$/){
-        $mem =~ s/\sMB$//;
+    my $arm64 = `sysctl -n hw.optional.arm64`;
+    if ($arm64 == 1){
+       $arch = "arm64";
+       $datawidth = 64;
     }
 
-    $common->setHardware({
-        PROCESSORT  => $processort,
-        PROCESSORN  => $processorn,
-        PROCESSORS  => $processors,
-        MEMORY      => $mem,
-        UUID        => $uuid,
-    });
+
+    # How much processor socket ?
+    my $ncpu=`sysctl -n hw.packages`;
+
+    # For each processor socket 
+    foreach my $cpu (1..$ncpu) {
+        $processors->{$cpu}->{MANUFACTURER} =  `sysctl -n machdep.cpu.vendor`;
+        if ($processors->{$cpu}->{MANUFACTURER} =~ /(Authentic|Genuine|)(.+)/i) {
+            $processors->{$cpu}->{MANUFACTURER} = $2;
+        }
+        chomp($processors->{$cpu}->{MANUFACTURER} );
+        $processors->{$cpu}->{TYPE} = `sysctl -n machdep.cpu.brand_string`;
+        chomp($processors->{$cpu}->{TYPE} );
+        $processors->{$cpu}->{SPEED} = `sysctl -n hw.cpufrequency` / 1000 / 1000;
+        $processors->{$cpu}->{L2CACHESIZE} = `sysctl -n hw.l2cachesize` / 1024;
+        $processors->{$cpu}->{CORES} = `sysctl -n machdep.cpu.core_count`;
+        chomp($processors->{$cpu}->{CORES});
+        $processors->{$cpu}->{THREADS} = `sysctl -n machdep.cpu.thread_count`;
+        chomp($processors->{$cpu}->{THREADS});
+        $processors->{$cpu}->{LOGICAL_CPUS} = `sysctl -n machdep.cpu.logical_per_package`;
+        chomp($processors->{$cpu}->{LOGICAL_CPUS});
+        $processors->{$cpu}->{CPUARCH} = $arch;
+        $processors->{$cpu}->{DATA_WIDTH} = $datawidth;
+        $processors->{$cpu}->{NBSOCKET} = $cpu;
+        chomp($processors->{$cpu}->{NBSOCKET});
+        $processors->{$cpu}->{SERIALNUMBER} = "N/A";
+    }
+    
+    # Add new cpu infos to inventory
+    foreach (keys %{$processors}){
+	    $common->addCPU($processors->{$_});
+    }
 }
-
 1;

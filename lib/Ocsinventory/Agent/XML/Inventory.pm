@@ -9,7 +9,7 @@ Ocsinventory::Agent::XML::Inventory - the XML abstraction layer
 
 =head1 DESCRIPTION
 
-OCS Inventory uses XML for the data transmition. The module is the
+OCS Inventory uses XML for the data transmission. The module is the
 abstraction layer. It's mostly used in the backend module where it
 called $inventory in general.
 
@@ -60,7 +60,7 @@ sub new {
 
 =item initialise()
 
-Runs the backend modules to initilise the data.
+Runs the backend modules to initialise the data.
 
 =cut
 sub initialise {
@@ -92,6 +92,8 @@ sub getContent {
         my $macaddr = $self->{xmlroot}->{CONTENT}->{NETWORKS}->[0]->{MACADDR}->[0];
         my $ssn = $self->{xmlroot}->{CONTENT}->{BIOS}->{SSN}->[0];
         my $name = $self->{xmlroot}->{CONTENT}->{HARDWARE}->{NAME}->[0];
+        
+        my $osname = $self->{xmlroot}->{CONTENT}->{HARDWARE}->{OSNAME}->[0];
 
         my $missing;
 
@@ -108,10 +110,14 @@ sub getContent {
         my $content = XMLout( $self->{xmlroot}, RootName => 'REQUEST', XMLDecl => '<?xml version="1.0" encoding="UTF-8"?>', SuppressEmpty => undef );
 
         # Cleaning XML to delete unprintable characters
-        my $clean_content=$common->cleanXml($content);
+        my $clean_content = $common->cleanXml($content);
 
         # Cleaning xmltags content after adding it o inventory
         $common->flushXMLTags();
+        
+        if(defined($osname) && lc($osname) eq 'macos') {
+            return $content;
+        }
 
         return $clean_content;
     }
@@ -188,7 +194,7 @@ sub processChecksum {
         'PORTS'         => 128,
         'STORAGES'      => 256,
         'DRIVES'        => 512,
-        'INPUT'         => 1024,
+        'INPUTS'        => 1024,
         'MODEMS'        => 2048,
         'NETWORKS'      => 4096,
         'PRINTERS'      => 8192,

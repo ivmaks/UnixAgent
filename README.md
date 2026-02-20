@@ -6,12 +6,13 @@
 <p align="center">
   <b>Some Links:</b><br>
   <a href="http://ask.ocsinventory-ng.org">Ask question</a> |
-  <a href="#COMING_SOON_STAY_CONNECTED">Installation</a> |
-  <a href="https://www.ocsinventory-ng.org/?utm_source=github-ocs">Website</a> |
-  <a href="https://www.ocsinventory-ng.org/en/#ocs-pro-en">OCS Professional</a>
+  <a href="https://wiki.ocsinventory-ng.org/03.Basic-documentation/Setting-up-the-UNIX-agent-manually-on-client-computers/">Source installation</a> | 
+  <a href="https://wiki.ocsinventory-ng.org/03.Basic-documentation/Setting-up-the-UNIX-agent-using-repository-on-client-computers/">RPM/DEB installation</a> |
+  <a href="https://ocsinventory-ng.org/">Website</a> |
+  <a href="https://ocsinventory-ng.org/?page_id=140&lang=en">OCS Professional</a>
 </p>
 
-<p align='justify'>
+<p align="justify">
   Ocsinventory-Agent is an agent for ocsinventory NG. It supports Linux,
   Solaris and AIX. *BSD support is in progress.
 </p>
@@ -52,7 +53,6 @@
   #### The following PERL modules are optional:
     - Proc::Daemon Daemon mode
     - Proc::PID::File brings the pid file support if Proc::Daemon is installed
-    - nvidia::ml brings you some informations on Nvidia Graphic Cards such as memory size, cpu speed, bios version and driver version.
     - Compress::Zlib
 
   #### The following module is needed if you plan to prepare a tarball or install directly from the Bazaar devel branch. (See SOURCES below.):
@@ -124,3 +124,12 @@ Copyright Holder:
   2008 (C) IBH IT-Service GmbH [http://www.ibh.de/]
 
 License: This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+Ocsinventory::Agent::Backend::OS::Linux::Storages::Adaptec uses code from Parse-Arcconf:
+
+https://github.com/kumy/Parse-Arcconf
+
+License and Copyright:
+Copyright (C) 2012 Mathieu Alorent
+
+This program is free software; you can redistribute it and/or modify it under the terms of either: the GNU General Public License as published by the Free Software Foundation; or the Artistic License. See http://dev.perl.org/licenses/ for more information.

@@ -143,7 +143,10 @@ sub run {
         }
     } elsif (defined($config->{config}{local}) && $config->{config}{local}) {
         $config->{config}{vardir} = $config->{config}{basevardir}."/__LOCAL__";
+    } else {
+        $logger->error("You must set either --server or --local");
     }
+
 
     if (!recMkdir ($config->{config}{vardir})) {
         $logger->error("Failed to create ".$config->{config}{vardir}." directory: $!");
@@ -158,7 +161,18 @@ sub run {
 
     # Setting SSL CA file path if not set in configuration
     unless ($config->{config}{ca}) {
-        $config->{config}{ca} = $config->{config}{vardir}."/cacert.pem";
+        # use server specific cacert.pem if it exists
+        $config->{config}{ca} = $config->{config}{vardir}.'/cacert.pem';
+
+        # if no server specific cacert.pem, look for a bundle in our config dir
+        unless (-e $config->{config}{vardir}.'/cacert.pem') {
+            foreach (@{$config->{config}{etcdir}}) {
+                if (-e $_.'/ocsinventory-agent-cacert.pem') {
+                    $config->{config}{ca} = $_.'/ocsinventory-agent-cacert.pem';
+                    last;
+                }
+            }
+        }
     }
 
 ################################################################################################################

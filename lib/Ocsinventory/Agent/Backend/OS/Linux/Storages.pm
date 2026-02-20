@@ -70,14 +70,18 @@ sub getDescription {
     # TODO maybe we should trust udev detection by default?
     return "USB" if (defined ($description) && $description =~ /usb/i);
 
-    if ($name =~ /^s/) { # /dev/sd* are SCSI _OR_ SATA
+    if ($name =~ /^sd/) { # /dev/sd* are SCSI _OR_ SATA
         if ($manufacturer =~ /ATA/ || $serialnumber =~ /ATA/ || $description =~ /ATA/i) {
             return  "SATA";
         } else {
             return "SCSI";
         }
+    } elsif ($name =~ /^sg/) { # "g" stands for Generic SCSI
+        return "SCSI";
+    } elsif ($name =~ /^vd/ || ($description && $description =~ /VIRTIO/)) {
+        return "Virtual";
     } else {
-        return "IDE";
+        return $description || "IDE";
     }
 }
 
@@ -111,36 +115,36 @@ sub getManufacturer {
 sub getMultipathDisks {
     my @mpList = `multipath -l`;
     my @devs;
-	  my $volume;
-	  my $serial;
+          my $volume;
+          my $serial;
     my $dm;
-	  my $manufacturer;
-	  my $model;
+          my $manufacturer;
+          my $model;
     foreach my $line (@mpList) {
         if ($line =~ /^([\w\d]+)\s\((.*)\)\s(dm-\d+)\s(\w+)\s+,([\w\d\s]+)$/i) {
             $volume = $1;
-			      $serial = $2;
-			      $dm = $3;
-			      $manufacturer = $4;
-			      $model = $5;
+            $serial = $2;
+            $dm = $3;
+            $manufacturer = $4;
+            $model = $5;
         }
-		    if ($line =~ /size=(\d+)(\w+)\s/) {
-			      my $size = $1;
-			      my $unit = $2;
-			      # conversion to mebibyte
-			      my %conversion = (
-				        "T" => 1000**4,
-				        "G" => 1000**3,
-				        "M" => 1000**2,
-				        "K" => 1000,
-			      );
-			      if ($conversion{$unit}) {
-				        $size = $size / $conversion{$unit} * 2**20;
-			      } else {
-				        $size = $size." ".$unit;
-			      }
-			      push (@devs, {NAME=>$dm, DESCRIPTION=>$volume, TYPE=>"Multipath volume", MODEL=>$model, SERIALNUMBER=>$serial, MANUFACTURER=>$manufacturer});
-		    }
+        if ($line =~ /size=(\d+)(\w+)\s/) {
+            my $size = $1;
+            my $unit = $2;
+            # conversion to mebibyte
+            my %conversion = (
+                "T" => 1000**4,
+                "G" => 1000**3,
+                "M" => 1000**2,
+                "K" => 1000,
+            );
+            if ($conversion{$unit}) {
+                $size = $size / $conversion{$unit} * 2**20;
+            } else {
+                $size = $size." ".$unit;
+            }
+            push (@devs, {NAME=>$dm, DESCRIPTION=>$volume, TYPE=>"Multipath volume", MODEL=>$model, SERIALNUMBER=>$serial, MANUFACTURER=>$manufacturer});
+        }
         if ($line =~ /(sd[a-z]+)/i) {
             push (@devs, {NAME=>$1, DESCRIPTION=>"Child of $dm", TYPE=>"Multipath child"});
         }
@@ -186,7 +190,7 @@ sub getFromDev {
     my $dir = "/dev";
 
     opendir (my $dh, $dir) or die $!;
-    @disks = grep{/^sd[a-z][a-z]?$|^vd[a-z][a-z]?$|^sr\d+$/} readdir($dh);
+    @disks = grep{/^sd[a-z][a-z]?$|^sg[a-z][a-z]?$|^vd[a-z][a-z]?$|^sr\d+$|^nvme\d+n\d+$/} readdir($dh);
     foreach (@disks) {
         push (@devs, {NAME => $_});
     }
@@ -213,7 +217,15 @@ sub getFromLshw {
     }
     my $xml = new XML::Simple;
     my $data = $xml->XMLin($input);
-    my $nodes = $data->{list}->{node};
+    my $list = $data->{list}->{node};
+    my $nodes;
+
+    # if there is only device, its hash is returned
+    if ( exists $list->{id} ) {
+        $nodes->{$list->{id}} = $list;
+    } else {
+	    $nodes = $list;
+    }
 
     foreach my $device (sort keys %$nodes) {
         my $description = "";
@@ -300,8 +312,8 @@ sub getFromLsblk {
     foreach my $line (`lsblk -ldbn`) {
         my @columns     = split /\s+/, $line;
         my $deviceName  = $columns[0];
-        my $size                = $columns[3];
-        my $type                = $columns[5];
+        my $size        = $columns[3];
+        my $type        = $columns[5];
         $size = "" if ($type =~ /rom/);
         push (@devs, {NAME => $deviceName, TYPE => $type, DISKSIZE => $size});
     }
@@ -501,26 +513,6 @@ sub run {
         }
     }
 
-    foreach my $device (getFromSmartctl($params,$devices)) {
-        my $name = $device->{NAME};
-        foreach my $f ("NAME", "MANUFACTURER", "TYPE", "MODEL", "DISKSIZE", "FIRMWARE", "SERIALNUMBER", "DESCRIPTION") {
-            if ($devices->{$name}->{$f} eq "") {
-                #debug print "getFromSmartctl $name $f device->{\$f} $device->{$f}\n";
-                $devices->{$name}->{$f} = $device->{$f};
-            }
-        }
-    }
-
-    foreach my $device (getFromuDev2($params,$devices)) {
-        my $name = $device->{NAME};
-        foreach my $f ("NAME", "MANUFACTURER", "TYPE", "MODEL", "FIRMWARE", "SERIALNUMBER") {
-            if  ($devices->{$name}->{$f} eq "") {
-                #debug print "getFromuDev2 $name $f device->{\$f} $device->{$f}\n";
-                $devices->{$name}->{$f} = $device->{$f};
-            }
-        }
-    }
-
     foreach my $device (getFromLshw($params)) {
         my $name = $device->{NAME};
         foreach my $f ("NAME", "MANUFACTURER", "MODEL", "DESCRIPTION", "TYPE", "DISKSIZE", "SERIALNUMBER", "FIRMWARE") {
@@ -561,6 +553,40 @@ sub run {
         }
     }
 
+    foreach my $device (getFromSmartctl($params,$devices)) {
+        my $name = $device->{NAME};
+        foreach my $f ("NAME", "MANUFACTURER", "TYPE", "MODEL", "DISKSIZE", "FIRMWARE", "SERIALNUMBER", "DESCRIPTION") {
+            if ($devices->{$name}->{$f} eq "") {
+                #debug print "getFromSmartctl $name $f device->{\$f} $device->{$f}\n";
+                $devices->{$name}->{$f} = $device->{$f};
+            }
+        }
+    }
+
+    foreach my $device (getFromuDev2($params,$devices)) {
+        my $name = $device->{NAME};
+        foreach my $f ("NAME", "MANUFACTURER", "TYPE", "MODEL", "FIRMWARE", "SERIALNUMBER") {
+            if  ($devices->{$name}->{$f} eq "") {
+                #debug print "getFromuDev2 $name $f device->{\$f} $device->{$f}\n";
+                $devices->{$name}->{$f} = $device->{$f};
+            }
+        }
+    }
+
+    my $logical_drive = undef;
+    if ($common->can_run ('arcconf') ) {
+        my ($cur_cont,$info,$key,$dev,$controller);
+        $controller = Ocsinventory::Agent::Backend::OS::Linux::Storages::Adaptec::parse_config();
+        foreach $cur_cont (keys %{$controller}){    #travers Controller
+            $info =  $controller->{$cur_cont};
+            foreach $key (keys %{$info}){           #travers Infos of Controller
+                 if ($key=~m/logical drive/) {
+                      $logical_drive= $info->{$key};
+                }
+            }
+        }
+    }
+
     foreach my $device (sort (keys %$devices)) {
         if ($devices->{$device}->{TYPE} =~ /(CD)|(CD\/DVD)|(DVD)|(BD)/i) {
             $devices->{$device}->{DISKSIZE} = "0000";
@@ -579,6 +605,14 @@ sub run {
         #if ($devices->{$device}->{CAPACITY} =~ /^cdrom$/) {
         #    $devices->{$device}->{CAPACITY} = getCapacity($devices->{$device}->{NAME})*10**-6;
         #}
+        if ($devices->{$device}->{MANUFACTURER}=~m/Adaptec/) {#check if found devices are Logical Devices
+            foreach my $devkey (keys %{$logical_drive}) {
+                if($devices->{$device}->{MODEL} =~m/$logical_drive->{$devkey}->{'Logical device name'}/) { #Correct infos
+                    $devices->{$device}->{TYPE}="Logical Drive";
+                    $devices->{$device}->{DISKSIZE} = $logical_drive->{$devkey}->{'Size'};
+                }
+            }
+        }
         $common->addStorages($devices->{$device});
     }
 }

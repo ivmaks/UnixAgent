@@ -1,11 +1,10 @@
 package Ocsinventory::Agent::Backend::Virtualization::VirtualBox;
 
-# This module detects only all VMs create by the user who launch this module (root VMs).
-
 use strict;
 
 use XML::Simple;
 use File::Glob ':glob';
+use utf8;
 
 sub check { 
     my $params = shift;
@@ -14,6 +13,20 @@ sub check {
 }
 
 sub run {
+
+    # VBoxManage can crash if some VM infos contains accented characters
+    my $locale = "C";
+    open(my $localeFile, '<', "/etc/default/locale") or print("Could not open /etc/default/locale: $!");
+    while (my $line = <$localeFile>){
+        if ($line =~ m/^LANG=(.*)/) {
+            $locale = $1;
+            last;
+        }
+    }
+    close($localeFile);
+    $ENV{LANG}=$locale;
+    $ENV{LC_ALL}=$locale;
+
     my $params = shift;
     my $common = $params->{common};
     my $scanhomedirs = $params->{accountinfo}{config}{scanhomedirs};
@@ -21,7 +34,8 @@ sub run {
     my $cmd_list_vms = "VBoxManage -nologo list vms";
 
     my ( $version ) = ( `VBoxManage --version` =~ m/^(\d\.\d).*$/ ) ;
-    if ( $version > 2.1 ) {         # detect VirtualBox version 2.2 or higher
+    # Detect VirtualBox version 2.2 or higher
+    if ( $version > 2.1 ) {
         $cmd_list_vms = "VBoxManage -nologo list --long vms";
     }
     
@@ -30,47 +44,67 @@ sub run {
     my $mem;
     my $status;
     my $name;
-        
-    foreach my $line (`$cmd_list_vms`){                 # read only the information on the first paragraph of each vm
-        chomp ($line);
-        if ($in == 0 and $line =~ m/^Name:\s+(.*)$/) {      # begin
-            $name = $1;
-            $in = 1; 
-        } elsif ($in == 1 ) {
-            if ($line =~ m/^UUID:\s+(.*)/) {
-                $uuid = $1;
-            } elsif ($line =~ m/^Memory size:\s+(.*)/ ) {
-                $mem = $1;
-            } elsif ($line =~ m/^State:\s+(.*)\(.*/) {
-                $status = ( $1 =~ m/off/ ? "off" : $1 );
-            } elsif ($line =~ m/^\s*$/) {                        # finish
-                $in = 0 ;
-                next if $uuid =~ /^N\\A$/ ;   #If no UUID found, it is not a virtualmachine
-                $common->addVirtualMachine ({
-                    NAME      => $name,
-                    VCPU      => 1,
-                    UUID      => $uuid,
-                    MEMORY    => $mem,
-                    STATUS    => $status,
-                    SUBSYSTEM => "Oracle xVM VirtualBox",
-                    VMTYPE    => "VirtualBox",
-                });
+    my $cpus;
 
-                $name = $status = $mem = $uuid = 'N\A';     # useless but need it for security (new version, ...)
+    # Inventory process is running by cron/system service so there is no SUDO_USER
+    # We use local users who are in "vboxusers" local group
+    my $vboxusers_line = `getent group vboxusers`;
+    chomp($vboxusers_line);
+    my @vboxusers = split(/,/, (split(/:/, $vboxusers_line))[-1]);
+    foreach my $vboxuser (@vboxusers) {
+
+        # Read only the information on the first paragraph of each vm
+        foreach my $line (`sudo -u $vboxuser $cmd_list_vms`){
+            chomp ($line);
+            # Although some lines starts with "Name:", it is not VM name
+            if ($in == 0 and $line =~ m/^Name:\s+([^:,]*)$/) {
+                $name = $1;
+                # Some VM names can contains accented characters
+                utf8::decode($name);
+                $in = 1; 
+            } elsif ($in == 1 ) {
+                if ($line =~ m/^UUID:\s+(.*)/) {
+                    $uuid = $1;
+                } elsif ($line =~ m/^Memory size:\s+(.*)/ ) {
+                    $mem = $1;
+                } elsif ($line =~ m/^Number of CPUs:\s+(.*)/) {
+                    $cpus = $1;
+                } elsif ($line =~ m/^State:\s+(.*)\(.*/) {
+                    $status = ( $1 =~ m/off/ ? "off" : $1 );
+                # Empty line does not mean it is end of current VM infos. Real VM infos last line starts with "Configured memory ballon:"    
+                } elsif ($line =~ m/^Configured memory balloon:\s+.*/) {
+                    $in = 0 ;
+                    # If no UUID found, it is not a virtualmachine
+                    next if $uuid =~ /^N\\A$/ ;
+                    $common->addVirtualMachine ({
+                        NAME      => $name,
+                        VCPU      => $cpus,
+                        UUID      => $uuid,
+                        MEMORY    => $mem,
+                        STATUS    => $status,
+                        SUBSYSTEM => "Oracle xVM VirtualBox",
+                        VMTYPE    => "VirtualBox",
+                    });
+
+                    # Useless but need it for security (new version, ...)
+                    $name = $status = $mem = $uuid = 'N\A';
+                }
             }
         }
-    }
-    
-    if ($in == 1) {     # Anormal situation ! save the current vm information ...
-        $common->addVirtualMachine ({
-            NAME      => $name,
-            VCPU      => 1,
-            UUID      => $uuid,
-            MEMORY    => $mem,
-            STATUS    => $status,
-            SUBSYSTEM => "Oracle xVM VirtualBox",
-            VMTYPE    => "VirtualBox",
-        });
+        
+        # Anormal situation ! save the current vm information ...
+        if ($in == 1) {
+            $common->addVirtualMachine ({
+                NAME      => $name,
+                VCPU      => 1,
+                UUID      => $uuid,
+                MEMORY    => $mem,
+                STATUS    => $status,
+                SUBSYSTEM => "Oracle xVM VirtualBox",
+                VMTYPE    => "VirtualBox",
+            });
+        }
+
     }
     
     # try to found another VMs, not exectute by root
@@ -80,10 +114,10 @@ sub run {
         chomp($line);
         if ( $line !~ m/^root/) {
             if ($line =~ m/^.*VirtualBox (.*)$/) {
-                my @process = split (/\s*\-\-/, $1);     #separate options
+                # Separate options
+                my @process = split (/\s*\-\-/, $1);
                 $name = $uuid = "N/A";
                 foreach my $option ( @process ) {
-                    #print $option."\n";
                     if ($option =~ m/^comment (.*)/) {
                         $name = $1;
                     } elsif ($option =~ m/^startvm (\S+)/) {
@@ -91,11 +125,14 @@ sub run {
                     }
                 }
                 
-                if ($scanhomedirs == 1 ) {    # If I will scan Home directories,
-                    $vmRunnings [$index] = $uuid;   # save the no-root running machine
+                # If I will scan Home directories,
+                if ($scanhomedirs == 1 ) {
+                    # save the no-root running machine
+                    $vmRunnings [$index] = $uuid;
                     $index += 1;
                 } else {
-                    $common->addVirtualMachine ({  # add in inventory
+                    # Add in inventory
+                    $common->addVirtualMachine ({
                         NAME      => $name,
                         VCPU      => 1,
                         UUID      => $uuid,

@@ -1,5 +1,123 @@
 Revision history for Ocsinventory::Agent
 
+2.9.1
+      * Copy cronjob script from Fedora
+      * Permit storing CA list in config dir
+      * Don't check XML if in forced mode
+      * Prevent misunderstanding of version option from config file
+      * Remove forbidden char in XML
+      * Fix Agent 2.9.0 not reporting OS minor release on Debian
+      * Fix addInput missing keys
+      * Fix SNMP macadress format
+
+2.9.0 
+      * Adding new Screen Manufacturer
+      * Update OSRelease.pm
+      * Change product name for Lenovo systems
+      * Small improvements in the parse of config file options
+      * Checking if XML is valid before submitting
+      * Fix Unix user inventory
+      * Fix raspberry has no serial
+      * Fix timeout from last command
+      * Fix memory issue on MacOS
+      * Fix empty value for ip address when contains 127
+      * Fix IpDiscover compilation
+      * Fix lshw storage discovery fails on servers with one device
+      * Fix bug group members displaying as HASH
+      * Fix the bad management of the inventor in RHEL
+      * Fix gateway misbehaviour with multiple network interfaces
+      * Fix XML has not well formed
+      * Fix issue Ubuntu 21.10 being reported as Ubuntu 11.0
+      * Remove devtmpfs partition inventory
+
+2.8.1
+       * Add octectstring management on SNMP Scan
+       * Add retry and timeout config for SNMP
+       * Fix perl warnings on HASH
+       * Fix warning on SNMP Scanner
+       * Fix digit retrival using bigger digit and avoid truncate
+       * Remove old SNMP scanning feature
+
+2.8
+       * Rework SNMP Interface and configuration
+       * Rework IPDiscover manager
+       * Rework LDAP Authenticaiton
+       * Rework Auth backend
+       * Rework software inventory data structure 
+       * Add MySQL 8 compatibility
+       * Add ASCII code management on deployment messages
+       * Add "is not empty" criteria on multi search
+       * Add computer archive feature 
+       * Add IPDiscover scan split by TAG
+       * Add CVE Matching regex
+       * Add chinese translation
+       * Add perl injector related inventory on main dashboard
+       * Update German translation
+       * Improve CVE Inventory
+       * Improve translation on deployment form
+       * Move networks submenu to inventory menu for better visibility
+       * Fix date interval search on multi criteria
+       * Fix IPDiscover subnet blacklist
+       * Fix CVE-2020-14947
+       * Fix stats to match user TAG restrictions
+       * Fix CSV export to match table show / hide configuration
+       * Fix minor bugs on CVE Inventory
+       * Fix deployment estimation time when editing a packaged
+       * Fix deployment fragment bug
+       * Fix small package deployment (< 1024 bytes)
+       * Fix a bug on MySQL SSL connection
+       * Remove SNMP_INVENTORY_DIFF
+       * Typos fix
+       * Minor bug fix
+
+2.6.1
+       * Allow encode http password in base64
+       * Fix repository inventory #254
+       * MacOS installer / packaging rework 
+       * Suppress error message for LSPCI
+       * Fix oracle package setup
+       * Remove uninitialized value message
+       * Now use os-release file
+       * Improve drives management (Linux / MacOS)
+       * Imprive IPv6 inventory
+
+2.6.0
+       * Fix issue Service-Pack wrong info on Linux Clients (reports on https://github.com/OCSInventory-NG/OCSInventory-ocsreports/issues/741)
+       * Fix issues #181, #187, #194, #197
+       * Merge PR #175, #178, #190, #191, #193, #196, #199, #201
+
+2.4.2
+       * Fix warning argument freebsd isn't numeric
+       * Fix Debian repository
+       * Update manifest
+       * Fix name and url in Repository
+       * Fix for Ubuntu and older Debian version
+       * Merge PR #141,#135,#143
+       * Fix spelling errors
+       * Add arcconf for Adaptec
+       * Fix issue #124
+       * Replace hpacucli with ssacli
+       * Merge PR #144,#145,#146,#147,#148,#150
+       * Make use of EDID utilities optional on modern kernels
+       * Fallback to mainboard serial if bios serial is not available
+       * Merge PR #152, #156, #158, #159
+       * Fix issue for ipdiscover
+       * Indicate god value for memory
+       * Use now Parse::EDID module to retrieve monitor infomrations
+       * Merge PR #161, #163, #164, #165, #169, #170, #172, #173, #174
+
+2.4.1  
+       * Add the date of installation for debian/ubuntu packages
+       * Add support for zfs
+       * Rewrite cpu bsd
+       * Fix some bugs on Repository/Deb.pm file
+       * Ipmi.pm : fix fatal typo
+       * Bios.pm : fix "invalid" message
+       * UUID.pm : fix "invalid" message
+       * Virtualization : fix for Proxmox
+       * Fix for vlans 
+       * Fix virsh out
+
 2.4    
        * Add test to switch 'waitpid command' according to OS
        * change bazar revision number to git revision number
@@ -163,7 +281,7 @@ Revision history for Ocsinventory::Agent
        * Download.pm uses LWP useragent initiated by Network.pm for SSL checks 
        * Download.pm uses LWP useragent initiated by Network.pm for info and frags files downloads
        * Network.pm can use LWP version 6 SSL useragent options
-       * New --ca configuration option to specify a CA certificate path for SSL certificate checks 
+       * New --ca configuration option to specify a CA certificates file path for SSL certificate checks
        * New --ssl configuration option to enable/disable SSL certificate checks 
        * Customize SNMP scans using a special XML format received from server 
        * Getting network devices MAC address during SNMP scans

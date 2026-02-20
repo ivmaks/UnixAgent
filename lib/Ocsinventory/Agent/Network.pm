@@ -9,6 +9,9 @@ use LWP::UserAgent;
 use Socket;
 
 use Ocsinventory::Compress;
+use Ocsinventory::Agent::Encrypt;
+
+#$XML::Simple::PREFERRED_PARSER = 'XML::Parser';
 
 sub new {
     my (undef, $params) = @_;
@@ -42,20 +45,20 @@ sub new {
     # Connect to server
     $self->{ua} = LWP::UserAgent->new(keep_alive => 1);
     if ($self->{config}->{proxy}) {
-        $self->{ua}->proxy(['http', 'https'], $self->{config}->{proxy});
+        $self->{ua}->proxy(['http', 'https'], 'connect://'.$self->{config}->{proxy}.'');
     } else {
         $self->{ua}->env_proxy;
     }
     my $version = 'OCS-NG_unified_unix_agent_v';
-    $version .= exists ($self->{config}->{VERSION})?$self->{config}->{VERSION}:'';
+    $version .= exists ($self->{config}->{version})?$self->{config}->{version}:'';
+    my $userencrypt = Ocsinventory::Agent::Encrypt::getClearText($self->{config}->{user});
+    my $pwdencrypt = Ocsinventory::Agent::Encrypt::getClearText($self->{config}->{password});
     $self->{ua}->agent($version);
-    $self->{config}->{user}.",".
-    $self->{config}->{password}."";
     $self->{ua}->credentials(
         $uaserver, # server:port, port is needed 
         $self->{config}->{realm},
-        $self->{config}->{user},
-        $self->{config}->{password}
+        $userencrypt,
+        $pwdencrypt
     );
 
     #Setting SSL configuration depending on LWP version
@@ -96,6 +99,20 @@ sub sendXML {
 
     $req->header('Pragma' => 'no-cache', 'Content-type',
       'application/x-compress');
+
+    if (! $self->{config}{force}) {
+      # Checking if XML is valid before submitting
+      $logger->debug ("checking XML");
+
+      eval { XML::Simple::XMLin( $message ) };
+      if($@) {
+        my $xml_error = $@;
+        $xml_error =~ s/^\n//;
+        $logger->error ('Invalid XML: '.$xml_error);
+        $logger->error ('Cannot submit XML! Abort...');
+        return;
+      }
+    }
 
     $logger->debug ("sending XML");
 
